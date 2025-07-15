@@ -3,10 +3,19 @@
 import { useState, useTransition } from "react"
 import { generateCipher, type GenerateCipherOutput } from "@/ai/flows/generate-cipher"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { KeyRound, Lightbulb, Loader2 } from "lucide-react"
+import { Heart, KeyRound, Lightbulb, Loader2, RotateCw } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
@@ -26,6 +35,8 @@ type GameClientProps = {
 
 export function GameClient({ initialCipherData }: GameClientProps) {
   const [level, setLevel] = useState(1)
+  const [lives, setLives] = useState(3)
+  const [isGameOver, setIsGameOver] = useState(false)
   const [cipherData, setCipherData] = useState<GenerateCipherOutput>(initialCipherData)
   const [showHint, setShowHint] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -56,7 +67,15 @@ export function GameClient({ initialCipherData }: GameClientProps) {
     })
   }
 
+  const handleRestart = () => {
+    setIsGameOver(false)
+    setLives(3)
+    fetchNewCipher(1)
+  }
+
   function onSubmit(data: z.infer<typeof FormSchema>) {
+    if (isGameOver) return;
+
     if (data.guess.trim().toLowerCase() === cipherData.plainText.trim().toLowerCase()) {
       toast({
         title: "Chính xác!",
@@ -65,15 +84,21 @@ export function GameClient({ initialCipherData }: GameClientProps) {
       const newLevel = level + 1
       fetchNewCipher(newLevel)
     } else {
-      toast({
-        variant: "destructive",
-        title: "Sai rồi!",
-        description: "Đáp án không đúng. Hãy thử lại nhé.",
-      })
-      form.setError("guess", {
-        type: "manual",
-        message: "Đáp án không chính xác.",
-      })
+      const newLives = lives - 1
+      setLives(newLives)
+      if (newLives > 0) {
+        toast({
+          variant: "destructive",
+          title: "Sai rồi!",
+          description: `Đáp án không đúng. Bạn còn ${newLives} mạng.`,
+        })
+        form.setError("guess", {
+          type: "manual",
+          message: "Đáp án không chính xác. Hãy thử lại.",
+        })
+      } else {
+        setIsGameOver(true)
+      }
     }
   }
 
@@ -86,7 +111,19 @@ export function GameClient({ initialCipherData }: GameClientProps) {
 
       <Card className="w-full">
         <CardHeader>
-          <CardTitle>Vòng {level}</CardTitle>
+          <div className="flex justify-between items-center">
+            <CardTitle>Vòng {level}</CardTitle>
+            <div className="flex items-center gap-2">
+              {[...Array(3)].map((_, i) => (
+                <Heart
+                  key={i}
+                  className={`h-6 w-6 transition-colors ${
+                    i < lives ? "fill-red-500 text-red-500" : "fill-muted text-muted-foreground"
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
           <CardDescription>Đây là thông điệp đã được mã hóa. Hãy tìm ra thông điệp gốc.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -106,13 +143,13 @@ export function GameClient({ initialCipherData }: GameClientProps) {
                       Lời giải của bạn
                     </FormLabel>
                     <FormControl>
-                      <Input placeholder="Nhập đáp án của bạn ở đây..." {...field} disabled={isPending} />
+                      <Input placeholder="Nhập đáp án của bạn ở đây..." {...field} disabled={isPending || isGameOver} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <Button type="submit" disabled={isPending} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Button type="submit" disabled={isPending || isGameOver} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
                 {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Kiểm Tra
               </Button>
@@ -120,7 +157,7 @@ export function GameClient({ initialCipherData }: GameClientProps) {
           </Form>
         </CardContent>
         <CardFooter className="flex flex-col items-start gap-4">
-          <Button variant="outline" onClick={() => setShowHint(!showHint)} disabled={isPending}>
+          <Button variant="outline" onClick={() => setShowHint(!showHint)} disabled={isPending || isGameOver}>
             <Lightbulb className="mr-2 h-4 w-4 text-accent" />
             {showHint ? "Ẩn Gợi Ý" : "Lấy Gợi Ý"}
           </Button>
@@ -132,6 +169,25 @@ export function GameClient({ initialCipherData }: GameClientProps) {
           )}
         </CardFooter>
       </Card>
+
+      <AlertDialog open={isGameOver}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Trò Chơi Kết Thúc!</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn đã hết mạng. Đừng lo, hãy thử lại nhé!
+              <br />
+              Đáp án đúng là: <strong className="text-primary">{cipherData.plainText}</strong>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={handleRestart} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
+              <RotateCw className="mr-2 h-4 w-4" />
+              Chơi Lại
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
